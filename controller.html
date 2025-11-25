@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Controller</title>
+<style>
+body {
+  background: black;
+  color: #2563eb;
+  font-family: monospace;
+  padding: 20px;
+}
+
+#preview {
+  white-space: pre-wrap;
+  font-size: 20px;
+  border: 1px solid #2563eb;
+  padding: 20px;
+  height: 90vh;
+  overflow-y: auto;
+}
+</style>
+</head>
+<body>
+
+<h2>📡 Modo Apresentador aperte CTRL + K para apagar </h2>
+<div id="preview"></div>
+
+<script>
+const preview = document.getElementById("preview");
+const channel = new BroadcastChannel("matrix-live");
+
+let buffer = "";
+let lastTypeTime = Date.now();
+let matrixActive = false;
+
+function send(msg) {
+  channel.postMessage(msg);
+}
+
+document.addEventListener("keydown", (e) => {
+  lastTypeTime = Date.now();
+
+  if (matrixActive) {
+    send("__STOP_MATRIX__");
+    matrixActive = false;
+  }
+
+  // LIMPAR TUDO INSTANTÂNEO
+  if (e.ctrlKey && e.key.toLowerCase() === "l") {
+    e.preventDefault();
+    buffer = "";
+    send("__CLEAR__");
+    preview.textContent = "";
+    return;
+  }
+
+  // LIMPAR RÁPIDO COM EFEITO
+  if (e.ctrlKey && e.key.toLowerCase() === "k") {
+    e.preventDefault();
+    buffer = "";
+    send("__FAST_CLEAR__");
+    preview.textContent = "";
+    return;
+  }
+
+  if (e.key.length === 1) {
+    buffer += e.key;
+    send(e.key);
+  } 
+  else if (e.key === "Enter") {
+    buffer += "\n";
+    send("\n");
+  } 
+  else if (e.key === "Backspace") {
+    e.preventDefault();
+    buffer = buffer.slice(0, -1);
+    send("__BACKSPACE__");
+  }
+
+  preview.textContent = buffer;
+});
+
+setInterval(() => {
+  if (!matrixActive && Date.now() - lastTypeTime > 6000) {
+    matrixActive = true;
+    send("__START_MATRIX__");
+  }
+}, 1000);
+</script>
+
+</body>
+</html>

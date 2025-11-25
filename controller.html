@@ -23,20 +23,39 @@ body {
 </head>
 <body>
 
-<h2>📡 Modo Apresentador aperte CTRL + K para apagar </h2>
+<h2>📡 Modo Apresentador — CTRL + K limpa rápido</h2>
 <div id="preview"></div>
 
+<!-- CDN Supabase -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <script>
+// ====== CONFIGURAÇÃO (SÓ ALTERAR ISSO) ======
+const SUPABASE_URL = "https://cjbfcihsswjvdadzjfen.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqYmZjaWhzc3dqdmRhZHpqZmVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxMDI2NTIsImV4cCI6MjA3OTY3ODY1Mn0.121szlnOSL7es3cSJcnzVtrLmHcxw3p4m9U1S5HvSj0";
+// ============================================
+
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 const preview = document.getElementById("preview");
-const channel = new BroadcastChannel("matrix-live");
 
 let buffer = "";
 let lastTypeTime = Date.now();
 let matrixActive = false;
 
-function send(msg) {
-  channel.postMessage(msg);
+// Cria canal realtime
+const channel = supabase.channel("matrix-live");
+
+async function send(msg) {
+  await channel.send({
+    type: "broadcast",
+    event: "message",
+    payload: { data: msg }
+  });
 }
+
+// Conecta
+channel.subscribe();
 
 document.addEventListener("keydown", (e) => {
   lastTypeTime = Date.now();
@@ -46,7 +65,6 @@ document.addEventListener("keydown", (e) => {
     matrixActive = false;
   }
 
-  // LIMPAR TUDO INSTANTÂNEO
   if (e.ctrlKey && e.key.toLowerCase() === "l") {
     e.preventDefault();
     buffer = "";
@@ -55,7 +73,6 @@ document.addEventListener("keydown", (e) => {
     return;
   }
 
-  // LIMPAR RÁPIDO COM EFEITO
   if (e.ctrlKey && e.key.toLowerCase() === "k") {
     e.preventDefault();
     buffer = "";
@@ -81,6 +98,7 @@ document.addEventListener("keydown", (e) => {
   preview.textContent = buffer;
 });
 
+// Matrix automático por inatividade
 setInterval(() => {
   if (!matrixActive && Date.now() - lastTypeTime > 6000) {
     matrixActive = true;

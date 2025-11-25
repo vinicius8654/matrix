@@ -14,7 +14,6 @@ body {
   overflow:hidden;
 }
 
-/* MATRIX */
 #matrixCanvas {
   position:fixed;
   inset:0;
@@ -24,7 +23,6 @@ body {
   transition:opacity 1.5s ease;
 }
 
-/* TERMINAL */
 #terminal {
   position:fixed;
   inset:0;
@@ -37,7 +35,6 @@ body {
   transition:opacity 1.5s ease;
 }
 
-/* CURSOR */
 .cursor {
   animation:blink 1s steps(1) infinite;
 }
@@ -46,7 +43,6 @@ body {
   50% { opacity:0; }
 }
 
-/* CRT OVERLAY REAL */
 #crt {
   position:fixed;
   inset:0;
@@ -74,11 +70,19 @@ body {
 <div id="terminal"></div>
 <div id="crt"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <script>
+// ====== CONFIGURAÇÃO (SÓ ALTERAR ISSO) ======
+const SUPABASE_URL = "COLE_SUA_URL_AQUI";
+const SUPABASE_ANON_KEY = "COLE_SUA_ANON_KEY_AQUI";
+// ============================================
+
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 const terminal = document.getElementById("terminal");
 const canvas   = document.getElementById("matrixCanvas");
 const ctx      = canvas.getContext("2d");
-const channel  = new BroadcastChannel("matrix-live");
 
 let buffer = "";
 let matrixRunning = false;
@@ -87,14 +91,59 @@ let cursor = document.createElement("span");
 cursor.className = "cursor";
 cursor.textContent = "█";
 
-/* ===== RENDER TEXTO ===== */
+// Canal realtime
+const channel = supabase.channel("matrix-live");
+
+// ===== RECEBER MENSAGENS =====
+channel
+  .on("broadcast", { event: "message" }, (payload) => {
+    const data = payload.payload.data;
+
+    if (data === "__START_MATRIX__") {
+      startMatrix();
+      return;
+    }
+
+    if (data === "__STOP_MATRIX__") {
+      stopMatrix();
+      return;
+    }
+
+    if (data === "__CLEAR__") {
+      buffer = "";
+      render();
+      return;
+    }
+
+    if (data === "__FAST_CLEAR__") {
+      const iv = setInterval(() => {
+        if (buffer.length > 0) {
+          buffer = buffer.slice(0, -6);
+          render();
+        } else {
+          clearInterval(iv);
+        }
+      }, 10);
+      return;
+    }
+
+    if (data === "__BACKSPACE__") {
+      buffer = buffer.slice(0, -1);
+    } else {
+      buffer += data;
+    }
+
+    render();
+  })
+  .subscribe();
+
+// ===== FUNÇÕES =====
 function render() {
   if (matrixRunning) return;
   terminal.textContent = buffer;
   terminal.appendChild(cursor);
 }
 
-/* ===== MATRIX CONTROLE ===== */
 function startMatrix() {
   matrixRunning = true;
   canvas.style.opacity = "1";
@@ -111,47 +160,7 @@ function stopMatrix() {
   }, 1200);
 }
 
-/* ===== MENSAGENS DO CONTROLLER ===== */
-channel.onmessage = (e) => {
-
-  if (e.data === "__START_MATRIX__") {
-    startMatrix();
-    return;
-  }
-
-  if (e.data === "__STOP_MATRIX__") {
-    stopMatrix();
-    return;
-  }
-
-  if (e.data === "__CLEAR__") {
-    buffer = "";
-    render();
-    return;
-  }
-
-  if (e.data === "__FAST_CLEAR__") {
-    const iv = setInterval(() => {
-      if (buffer.length > 0) {
-        buffer = buffer.slice(0, -6);
-        render();
-      } else {
-        clearInterval(iv);
-      }
-    }, 10);
-    return;
-  }
-
-  if (e.data === "__BACKSPACE__") {
-    buffer = buffer.slice(0, -1);
-  } else {
-    buffer += e.data;
-  }
-
-  render();
-};
-
-/* ===== MATRIX ENGINE ===== */
+// ===== MATRIX ENGINE =====
 let cols, drops;
 
 function resize() {

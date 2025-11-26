@@ -249,12 +249,22 @@ addEventListener("resize", resize);
 
 /* choose char: 90% katakana, 10% ascii */
 function getMatrixChar() {
-  if (Math.random() < 0.9) {
-    return JAPANESE[Math.floor(Math.random() * JAPANESE.length)];
-  } else {
-    return String.fromCharCode(33 + Math.random() * 94);
+  const r = Math.random();
+
+  // 50% → números
+  if (r < 0.50) {
+    return String.fromCharCode(48 + Math.floor(Math.random() * 10)); // 0–9
   }
+
+  // 30% → letras (A–Z)
+  if (r < 0.80) {
+    return String.fromCharCode(65 + Math.floor(Math.random() * 26)); // A–Z
+  }
+
+  // 20% → japonês (katakana)
+  return JAPANESE[Math.floor(Math.random() * JAPANESE.length)];
 }
+
 
 /* reset states (called on start) */
 function resetColumnStates() {
@@ -309,7 +319,7 @@ function matrixLoop(now) {
 
   if (matrixRunning) {
     // clear with slight opacity for trail effect
-    ctx.fillStyle = "rgba(0,0,0,0.06)";
+    ctx.fillStyle = "rgba(0,0,0,0.03)";
     ctx.fillRect(0,0,canvas.width / (window.devicePixelRatio || 1), canvas.height / (window.devicePixelRatio || 1));
 
     ctx.textBaseline = "top";
@@ -434,3 +444,4 @@ render();
 </script>
 </body>
 </html>
+

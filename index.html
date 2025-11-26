@@ -210,11 +210,20 @@ resize();
 addEventListener("resize", resize);
 
 function getMatrixChar() {
-  if (Math.random() < 0.9) {
-    return JAPANESE[Math.floor(Math.random() * JAPANESE.length)];
-  } else {
-    return String.fromCharCode(33 + Math.random() * 94);
+  const r = Math.random();
+
+  // 50% → números
+  if (r < 0.50) {
+    return String.fromCharCode(48 + Math.floor(Math.random() * 10)); // 0–9
   }
+
+  // 30% → letras (A–Z)
+  if (r < 0.80) {
+    return String.fromCharCode(65 + Math.floor(Math.random() * 26)); // A–Z
+  }
+
+  // 20% → japonês (katakana)
+  return JAPANESE[Math.floor(Math.random() * JAPANESE.length)];
 }
 
 function resetColumnStates() {
@@ -360,3 +369,4 @@ render();
 </script>
 </body>
 </html>
+

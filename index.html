@@ -3,18 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <title>Viewer</title>
-
 <style>
 * { margin:0; padding:0; }
-
 body {
   background:black;
   color:#2563eb;
   font-family:monospace;
   overflow:hidden;
 }
-
-/* MATRIX */
 #matrixCanvas {
   position:fixed;
   inset:0;
@@ -23,29 +19,6 @@ body {
   opacity:0;
   transition:opacity 1.5s ease;
 }
-
-/* VIDEO - PESSOA DE CÓDIGO */
-#codeVideo {
-  position:fixed;
-  inset:0;
-  width:100%;
-  height:100%;
-  object-fit:cover;
-  z-index:3;
-
-  opacity:0;
-  transition:opacity 1.2s ease;
-
-  mix-blend-mode:screen;
-  filter:
-    contrast(160%)
-    brightness(110%)
-    hue-rotate(180deg)
-    saturate(1.2)
-    blur(0.5px);
-}
-
-/* TERMINAL */
 #terminal {
   position:fixed;
   inset:0;
@@ -57,157 +30,117 @@ body {
   opacity:1;
   transition:opacity 1.5s ease;
 }
-
 .cursor {
   animation:blink 1s steps(1) infinite;
 }
 @keyframes blink {
   50% { opacity:0; }
 }
-
-/* CRT */
 #crt {
   position:fixed;
   inset:0;
   pointer-events:none;
   z-index:9999;
-  background:
-    radial-gradient(circle at center, rgba(37,99,235,0.06), transparent 55%),
-    repeating-linear-gradient(
-      to bottom,
-      rgba(37,99,235,0.12) 0px,
-      rgba(37,99,235,0.04) 2px,
-      rgba(0,0,0,0.35) 4px
-    );
+  background: radial-gradient(circle at center, rgba(37,99,235,0.06), transparent 55%), 
+              repeating-linear-gradient(
+                to bottom, 
+                rgba(37,99,235,0.12) 0px, 
+                rgba(37,99,235,0.04) 2px, 
+                rgba(0,0,0,0.35) 4px
+              );
   animation:crtFlicker 0.12s infinite;
 }
 @keyframes crtFlicker {
   50% { opacity:0.85; }
+}
 </style>
 </head>
 <body>
-
 <canvas id="matrixCanvas"></canvas>
-
-<!-- 🎬 VIDEO DA SILHUETA DE CÓDIGOS -->
-<video id="codeVideo" autoplay muted loop>
-  <source src="keanu.mp4" type="video/mp4">
-</video>
-
 <div id="terminal"></div>
 <div id="crt"></div>
-
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
 <script>
-// ===== CONFIGURAÇÃO =====
+// ====== CONFIGURAÇÃO (SÓ ALTERAR ISSO) ======
 const SUPABASE_URL = "https://cjbfcihsswjvdadzjfen.supabase.co";
-const SUPABASE_ANON_KEY = "eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqYmZjaWhzc3dqdmRhZHpqZmVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxMDI2NTIsImV4cCI6MjA3OTY3ODY1Mn0.121szlnOSL7es3cSJcnzVtrLmHcxw3p4m9U1S5HvSj0";
-// =========================
-
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqYmZjaWhzc3dqdmRhZHpqZmVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxMDI2NTIsImV4cCI6MjA3OTY3ODY1Mn0.121szlnOSL7es3cSJcnzVtrLmHcxw3p4m9U1S5HvSj0";
+// ============================================
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
 const terminal = document.getElementById("terminal");
-const canvas   = document.getElementById("matrixCanvas");
-const ctx      = canvas.getContext("2d");
-const video    = document.getElementById("codeVideo");
-
+const canvas = document.getElementById("matrixCanvas");
+const ctx = canvas.getContext("2d");
 let buffer = "";
 let matrixRunning = false;
-
 let cursor = document.createElement("span");
 cursor.className = "cursor";
 cursor.textContent = "█";
 
+// Canal realtime
 const channel = supabase.channel("matrix-live");
 
-/* ===== RECEBER COMANDOS ===== */
+// ===== RECEBER MENSAGENS =====
 channel
-  .on("broadcast", { event: "message" }, (payload) => {
-    const data = payload.payload.data;
-
-    if (data === "__START_MATRIX__") {
-      startMatrix();
-      return;
-    }
-
-    if (data === "__STOP_MATRIX__") {
-      stopMatrix();
-      return;
-    }
-
-    if (data === "__CLEAR__") {
-      buffer = "";
-      render();
-      return;
-    }
-
-    if (data === "__FAST_CLEAR__") {
-      const iv = setInterval(() => {
-        if (buffer.length > 0) {
-          buffer = buffer.slice(0, -6);
-          render();
-        } else {
-          clearInterval(iv);
-        }
-      }, 10);
-      return;
-    }
-
-    if (data === "__BACKSPACE__") {
-      buffer = buffer.slice(0, -1);
-    } else {
-      buffer += data;
-    }
-
+.on("broadcast", { event: "message" }, (payload) => {
+  const data = payload.payload.data;
+  if (data === "__START_MATRIX__") {
+    startMatrix();
+    return;
+  }
+  if (data === "__STOP_MATRIX__") {
+    stopMatrix();
+    return;
+  }
+  if (data === "__CLEAR__") {
+    buffer = "";
     render();
-  })
-  .subscribe();
+    return;
+  }
+  if (data === "__FAST_CLEAR__") {
+    const iv = setInterval(() => {
+      if (buffer.length > 0) {
+        buffer = buffer.slice(0, -6);
+        render();
+      } else {
+        clearInterval(iv);
+      }
+    }, 10);
+    return;
+  }
+  if (data === "__BACKSPACE__") {
+    buffer = buffer.slice(0, -1);
+  } else {
+    buffer += data;
+  }
+  render();
+})
+.subscribe();
 
-/* ===== TEXTO ===== */
+// ===== FUNÇÕES =====
 function render() {
   if (matrixRunning) return;
   terminal.textContent = buffer;
   terminal.appendChild(cursor);
 }
-
-/* ===== EFEITO MATRIX + VIDEO ===== */
 function startMatrix() {
   matrixRunning = true;
-  canvas.style.opacity  = "1";
+  canvas.style.opacity = "1";
   terminal.style.opacity = "0";
-
-  video.style.opacity = "0.4";
-  video.play();
 }
-
 function stopMatrix() {
   matrixRunning = false;
   canvas.style.opacity = "0";
-  video.style.opacity  = "0";
-
-  video.pause();
-  video.currentTime = 0;
-
   setTimeout(() => {
     terminal.style.opacity = "1";
     render();
   }, 1200);
 }
 
-/* ===== KATAKANA MATRIX CHARSET ===== */
-const katakana =
-"ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉ" +
-"ﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜｦﾝ" +
-"0123456789";
-
-/* ===== MATRIX ENGINE ===== */
+// ===== MATRIX ENGINE =====
 let cols, drops;
-
 function resize() {
-  canvas.width  = innerWidth;
+  canvas.width = innerWidth;
   canvas.height = innerHeight;
-  cols  = Math.floor(canvas.width / 18);
+  cols = Math.floor(canvas.width / 18);
   drops = Array(cols).fill(0);
 }
 resize();
@@ -217,14 +150,11 @@ function matrixLoop() {
   if (matrixRunning) {
     ctx.fillStyle = "rgba(0,0,0,0.02)";
     ctx.fillRect(0,0,canvas.width,canvas.height);
-
     ctx.fillStyle = "#2563eb";
     ctx.font = "20px monospace";
-
     for (let i = 0; i < drops.length; i++) {
-      const char = katakana[Math.floor(Math.random() * katakana.length)];
+      const char = String.fromCharCode(33 + Math.random() * 94);
       ctx.fillText(char, i * 18, drops[i] * 20);
-
       if (drops[i] * 20 > canvas.height && Math.random() > 0.975) {
         drops[i] = 0;
       }
@@ -237,6 +167,5 @@ function matrixLoop() {
 render();
 matrixLoop();
 </script>
-
 </body>
 </html>

@@ -79,8 +79,19 @@ body {
   50% { opacity:0.85; }
 }
 
+/* shake animation for screen */
+@keyframes shakeAnim {
+  0% { transform: translate(0, 0); }
+  20% { transform: translate(-6px, 3px); }
+  40% { transform: translate(5px, -3px); }
+  60% { transform: translate(-4px, 4px); }
+  80% { transform: translate(4px, -2px); }
+  100% { transform: translate(0, 0); }
+}
+
 canvas {
   image-rendering: pixelated;
+  will-change: transform, filter;
 }
 </style>
 </head>
@@ -117,7 +128,7 @@ let cursor = document.createElement("span");
 cursor.className = "cursor";
 cursor.textContent = "█";
 
-/* ===== Supabase realtime channel ===== */
+/* ===== Supabase realtime channel (mantive — não altera gestos, mas permite controlar matriz via broadcast) ===== */
 const channel = supabase.channel("matrix-live");
 
 channel
@@ -140,6 +151,13 @@ channel
       return;
     }
 
+    // Efeitos remotos opcionais (se alguém enviar "__FLASH__", "__SHAKE__", "__GLITCH__", "__RAIN_FAST__", "__RAINBOW__")
+    if (data === "__FLASH__") { triggerEffect("FLASH"); return; }
+    if (data === "__SHAKE__") { triggerEffect("SHAKE"); return; }
+    if (data === "__GLITCH__") { triggerEffect("GLITCH"); return; }
+    if (data === "__RAIN_FAST__") { triggerEffect("RAIN_FAST"); return; }
+    if (data === "__RAINBOW__") { triggerEffect("RAINBOW"); return; }
+
     if (data === "__BACKSPACE__") {
       buffer = buffer.slice(0, -1);
     } else {
@@ -158,6 +176,8 @@ function render() {
 }
 
 /* ===== MATRIX START/STOP (sem vídeo) ===== */
+let asciiIntervalId = null;
+
 function startMatrix() {
   matrixRunning = true;
   canvas.style.opacity = "1";
@@ -165,6 +185,14 @@ function startMatrix() {
   crtDiv.style.opacity = "1";
   terminal.style.opacity = "0";
   resetColumnStates();
+
+  // iniciar ASCII cycle (a cada 2 minutos mostra por 1s)
+  if (!asciiIntervalId) {
+    // mostrar pela primeira vez após 2 minutos
+    asciiIntervalId = setInterval(() => {
+      if (matrixRunning) showAsciiLogo(1000);
+    }, 120000);
+  }
 }
 
 function stopMatrix() {
@@ -190,8 +218,16 @@ let columnTimer = [];
 let columnState = [];
 let lastTime = performance.now();
 
+/* FEATURES FLAGS */
+let rainbowMode = false;
+let rainbowExpires = 0;
+
 function resize() {
   const dpr = Math.max(1, window.devicePixelRatio || 1);
+
+  // reset transform/scale to avoid cumulative scaling
+  ctx.setTransform(1,0,0,1,0,0);
+  crtCtx.setTransform(1,0,0,1,0,0);
 
   canvas.width  = innerWidth * dpr;
   canvas.height = innerHeight * dpr;
@@ -283,6 +319,7 @@ function matrixLoop(now) {
   lastTime = now;
 
   if (matrixRunning) {
+    // slight fade for trailing
     ctx.fillStyle = "rgba(0,0,0,0.03)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -291,12 +328,28 @@ function matrixLoop(now) {
 
     updateColumnStates();
 
+    // check rainbow expiration
+    if (rainbowMode && now > rainbowExpires) {
+      rainbowMode = false;
+    }
+
     for (let i = 0; i < drops.length; i++) {
       const speed = columnSpeed[i] * columnMultiplier[i];
 
       const headChar = getMatrixChar();
-      ctx.fillStyle = "#bff3ff";
-      ctx.shadowColor = "#bff3ff";
+
+      // head color (if rainbow mode, vary per column and time)
+      let headColor = "#bff3ff";
+      let trailColor = "#2563eb";
+
+      if (rainbowMode) {
+        const hue = Math.floor(((i / Math.max(1, cols)) * 360 + (now / 30)) % 360);
+        headColor = `hsl(${hue} 90% 70%)`;
+        trailColor = `hsl(${(hue+20)%360} 80% 50%)`;
+      }
+
+      ctx.fillStyle = headColor;
+      ctx.shadowColor = headColor;
       ctx.shadowBlur = 8;
       ctx.globalAlpha = 1;
       ctx.fillText(headChar, i * 18, drops[i] * 20);
@@ -307,7 +360,7 @@ function matrixLoop(now) {
       for (let t = 1; t <= trailLength; t++) {
         const alpha = Math.max(0, 1 - t * 0.16);
         ctx.globalAlpha = alpha;
-        ctx.fillStyle = "#2563eb";
+        ctx.fillStyle = trailColor;
         const ch = getMatrixChar();
         ctx.fillText(ch, i * 18, (drops[i] - t) * 20);
       }
@@ -384,8 +437,234 @@ function drawCRTNoise(now) {
   }
 }
 
+/* ===== ASCII LOGO (oculto a cada 2 minutos por 1s) ===== */
+const ASCII_LOGO = [
+  "  __   __ ",
+  " /  \\ /  \\",
+  "| ( ) ( ) |",
+  " \\  / \\  / ",
+  "  \\/   \\/  ",
+  "  WAKE UP  "
+];
+
+function showAsciiLogo(duration = 1000) {
+  if (!matrixRunning) return;
+
+  // draw centered on canvas (uses CSS pixel coords—ctx already scaled)
+  const savedFill = ctx.fillStyle;
+  const savedShadow = ctx.shadowBlur;
+  const savedFont = ctx.font;
+
+  ctx.save();
+  ctx.font = `28px monospace`;
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "center";
+  ctx.shadowColor = "#ffffff";
+  ctx.shadowBlur = 16;
+
+  const cx = innerWidth / 2;
+  const cy = innerHeight / 2;
+  const lineHeight = 34;
+
+  for (let i = 0; i < ASCII_LOGO.length; i++) {
+    const y = cy - ((ASCII_LOGO.length - 1) / 2) * lineHeight + i * lineHeight;
+    // draw background rectangle for visibility
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    const textWidth = ctx.measureText(ASCII_LOGO[i]).width;
+    ctx.fillRect(cx - textWidth/2 - 12, y - 18, textWidth + 24, 36);
+    // draw text
+    ctx.fillStyle = "#bff3ff";
+    ctx.fillText(ASCII_LOGO[i], cx, y);
+  }
+
+  ctx.restore();
+
+  // after duration, just let normal loop continue (we don't clear here,
+  // fade will naturally cover it). If you want to absolutely remove, we could force a small redraw.
+  setTimeout(() => {
+    // small nudge draw to remove heavy shadow remnants
+    ctx.fillStyle = "rgba(0,0,0,0.04)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }, duration);
+}
+
 /* inicial */
 render();
+
+/* ========= GESTOS PARA MOBILE + DESKTOP (funcionam apenas quando matrixRunning === true) ========= */
+
+let lastTap = 0;
+let touchStartY = null;
+let touchEndY = null;
+let clickTimer = null;
+
+function matrixActive() {
+  return matrixRunning === true;
+}
+
+/* TOUCH handlers */
+document.addEventListener("touchstart", (e) => {
+  if (!matrixActive()) return;
+  touchStartY = e.changedTouches[0].screenY;
+}, {passive:true});
+
+document.addEventListener("touchend", (e) => {
+  if (!matrixActive()) return;
+  touchEndY = e.changedTouches[0].screenY;
+
+  // detect swipe
+  if (touchStartY !== null) {
+    const diff = touchStartY - touchEndY;
+    if (Math.abs(diff) >= 40) {
+      if (diff > 0) { // swipe up
+        triggerEffect("RAIN_FAST");
+      } else { // swipe down
+        triggerEffect("GLITCH");
+      }
+      touchStartY = null;
+      return;
+    }
+  }
+
+  // tap / double-tap
+  const currentTap = Date.now();
+  const tapInterval = currentTap - lastTap;
+
+  if (tapInterval < 300) {
+    // double tap
+    triggerEffect("SHAKE");
+    lastTap = 0;
+  } else {
+    // single tap
+    triggerEffect("FLASH");
+    lastTap = currentTap;
+  }
+
+  touchStartY = null;
+}, {passive:true});
+
+/* DESKTOP handlers (click + double-click behavior) */
+document.addEventListener("pointerup", (e) => {
+  // ignore if not matrix active
+  if (!matrixActive()) return;
+
+  const now = Date.now();
+  const dt = now - (clickTimer || 0);
+
+  if (dt < 300) {
+    // second click within threshold -> double
+    if (clickTimer) {
+      clearTimeout(clickTimer);
+      clickTimer = null;
+    }
+    triggerEffect("SHAKE");
+    lastTap = 0;
+  } else {
+    // schedule single click action (if second click doesn't come)
+    clickTimer = setTimeout(() => {
+      triggerEffect("FLASH");
+      clickTimer = null;
+    }, 280);
+    lastTap = now;
+  }
+});
+
+/* ========= SISTEMA DE EFEITOS ========= */
+
+function triggerEffect(type) {
+  switch (type) {
+    case "FLASH":
+      flashScreen();
+      break;
+
+    case "SHAKE":
+      shakeScreen();
+      break;
+
+    case "GLITCH":
+      glitchScreen();
+      break;
+
+    case "RAIN_FAST":
+      speedBoost();
+      break;
+
+    case "RAINBOW":
+      startRainbow(5000); // default 5s
+      break;
+
+    default:
+      console.warn("Efeito não reconhecido:", type);
+  }
+}
+
+/* ========= EFETOS VISUAIS ========= */
+
+// FLASH: breve aumento de brilho do canvas + crt
+function flashScreen() {
+  // quick bright flash
+  canvas.style.transition = "none";
+  crtCanvas.style.transition = "none";
+  canvas.style.filter = "brightness(3.0)";
+  crtCanvas.style.filter = "brightness(2.0)";
+  setTimeout(() => {
+    canvas.style.filter = "";
+    crtCanvas.style.filter = "";
+  }, 140);
+}
+
+// SHAKE: aplica animation shake
+function shakeScreen() {
+  const el = document.body; // sacudir o body/viewport para sensação maior
+  el.style.animation = "shakeAnim 0.35s";
+  // opcionais: aplicar também no canvas para compatibilidade
+  canvas.style.animation = "shakeAnim 0.35s";
+  setTimeout(() => {
+    el.style.animation = "";
+    canvas.style.animation = "";
+  }, 350);
+}
+
+// GLITCH: pequenas traduções e filtros rápidos
+function glitchScreen() {
+  const origFilter = canvas.style.filter || "";
+  let steps = 0;
+  const iv = setInterval(() => {
+    steps++;
+    // random tiny shifts + high contrast
+    canvas.style.transform = `translate(${(Math.random()*10-5).toFixed(1)}px, ${(Math.random()*6-3).toFixed(1)}px)`;
+    canvas.style.filter = `contrast(${1 + Math.random()*1.2}) saturate(${1 + Math.random()*1.2})`;
+    if (steps >= 8) {
+      clearInterval(iv);
+      canvas.style.transform = "";
+      canvas.style.filter = origFilter;
+    }
+  }, 45);
+}
+
+// RAIN_FAST: aumenta velocidade por 3s (multiplica columnMultiplier)
+function speedBoost() {
+  // multiply all columnMultipliers
+  for (let i = 0; i < columnMultiplier.length; i++) {
+    columnMultiplier[i] *= 4;
+  }
+  setTimeout(() => {
+    for (let i = 0; i < columnMultiplier.length; i++) {
+      columnMultiplier[i] /= 4;
+    }
+  }, 3000);
+}
+
+// RAINBOW: ativa modo colorido por `duration` ms
+function startRainbow(duration = 5000) {
+  rainbowMode = true;
+  rainbowExpires = performance.now() + duration;
+}
+
+/* ========= cleanup when page unloads ======== */
+window.addEventListener("beforeunload", () => {
+  if (asciiIntervalId) clearInterval(asciiIntervalId);
+});
 </script>
 
 </body>

@@ -2,10 +2,10 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Viewer</title>
-
+<title>Viewer - Matrix Avançada</title>
 <style>
-* { margin:0; padding:0; }
+* { margin:0; padding:0; box-sizing: border-box; }
+html,body { height:100%; }
 
 body {
   background:black;
@@ -14,14 +14,43 @@ body {
   overflow:hidden;
 }
 
-/* MATRIX */
+/* MATRIX CANVAS */
 #matrixCanvas {
   position:fixed;
   inset:0;
   background:black;
   z-index:2;
   opacity:0;
-  transition:opacity 1.5s ease;
+  transition:opacity 1.2s ease;
+}
+
+/* CRT NOISE CANVAS (dinâmico) */
+#crtCanvas {
+  position:fixed;
+  inset:0;
+  z-index:10000;
+  pointer-events:none;
+  opacity:0;
+  transition:opacity 0.5s linear;
+}
+
+/* VIDEO */
+#codeVideo {
+  position:fixed;
+  inset:0;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  z-index:3;
+  opacity:0;
+  transition:opacity 1.2s ease;
+  mix-blend-mode:screen;
+  filter:
+    contrast(160%)
+    brightness(110%)
+    hue-rotate(170deg)
+    saturate(1.2)
+    blur(0.4px);
 }
 
 /* TERMINAL */
@@ -34,7 +63,7 @@ body {
   z-index:1;
   background:black;
   opacity:1;
-  transition:opacity 1.5s ease;
+  transition:opacity 1.2s ease;
 }
 
 /* CURSOR */
@@ -43,27 +72,7 @@ body {
 }
 @keyframes blink { 50% { opacity:0; } }
 
-/* 🎬 NOVO — VÍDEO DE CÓDIGO */
-#codeVideo {
-  position:fixed;
-  inset:0;
-  width:100%;
-  height:100%;
-  object-fit:cover;
-  z-index:3;
-  opacity:0;
-  transition:opacity 1.5s ease;
-
-  mix-blend-mode:screen;
-  filter:
-    contrast(160%)
-    brightness(110%)
-    hue-rotate(170deg)
-    saturate(1.2)
-    blur(0.4px);
-}
-
-/* CRT OVERLAY */
+/* CRT STATIC GRADIENT OVERLAY (subtle) */
 #crt {
   position:fixed;
   inset:0;
@@ -77,37 +86,51 @@ body {
       rgba(37,99,235,0.04) 2px,
       rgba(0,0,0,0.35) 4px
     );
+  mix-blend-mode: screen;
   animation:crtFlicker .12s infinite;
 }
-@keyframes crtFlicker { 50% { opacity:0.85; } }
+@keyframes crtFlicker {
+  50% { opacity:0.85; }
+}
+
+/* small helper for performance: disable image rendering smoothing */
+canvas { image-rendering: pixelated; }
 </style>
 </head>
 <body>
 
 <canvas id="matrixCanvas"></canvas>
-
-<!-- 🎬 NOVO — VIDEO -->
+<!-- video -->
 <video id="codeVideo" autoplay muted loop>
   <source src="keanu.mp4" type="video/mp4">
 </video>
 
 <div id="terminal"></div>
+
+<!-- static gradient overlay -->
 <div id="crt"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- dynamic CRT noise canvas -->
+<canvas id="crtCanvas"></canvas>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-/* ===== CONFIGURAÇÃO SUPABASE ===== */
+/* ====== CONFIGURAÇÃO (SÓ ALTERAR ISSO) ====== */
 const SUPABASE_URL = "https://cjbfcihsswjvdadzjfen.supabase.co";
-const SUPABASE_ANON_KEY =
-"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqYmZjaWhzc3dqdmRhZHpqZmVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxMDI2NTIsImV4cCI6MjA3OTY3ODY1Mn0.121szlnOSL7es3cSJcnzVtrLmHcxw3p4m9U1S5HvSj0";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqYmZjaWhzc3dqdmRhZHpqZmVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxMDI2NTIsImV4cCI6MjA3OTY3ODY1Mn0.121szlnOSL7es3cSJcnzVtrLmHcxw3p4m9U1S5HvSj0";
+/* ============================================ */
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+/* DOM */
 const terminal = document.getElementById("terminal");
 const canvas   = document.getElementById("matrixCanvas");
 const ctx      = canvas.getContext("2d");
-const video    = document.getElementById("codeVideo"); // ⬅ VIDEO
+const video    = document.getElementById("codeVideo");
+const crtCanvas = document.getElementById("crtCanvas");
+const crtCtx = crtCanvas.getContext("2d");
+const crtDiv = document.getElementById("crt");
+
 let buffer = "";
 let matrixRunning = false;
 
@@ -115,29 +138,15 @@ let cursor = document.createElement("span");
 cursor.className = "cursor";
 cursor.textContent = "█";
 
-/* ===== CANAL REALTIME ===== */
+/* ===== Supabase realtime channel (mantive igual) ===== */
 const channel = supabase.channel("matrix-live");
 
 channel
 .on("broadcast", { event: "message" }, (payload) => {
   const data = payload.payload.data;
-
-  if (data === "__START_MATRIX__") {
-    startMatrix();
-    return;
-  }
-
-  if (data === "__STOP_MATRIX__") {
-    stopMatrix();
-    return;
-  }
-
-  if (data === "__CLEAR__") {
-    buffer = "";
-    render();
-    return;
-  }
-
+  if (data === "__START_MATRIX__") { startMatrix(); return; }
+  if (data === "__STOP_MATRIX__")  { stopMatrix(); return; }
+  if (data === "__CLEAR__")       { buffer = ""; render(); return; }
   if (data === "__FAST_CLEAR__") {
     const iv = setInterval(() => {
       if (buffer.length > 0) {
@@ -149,85 +158,279 @@ channel
     }, 10);
     return;
   }
-
   if (data === "__BACKSPACE__") {
     buffer = buffer.slice(0, -1);
   } else {
     buffer += data;
   }
-
   render();
 })
 .subscribe();
 
-/* ===== RENDER ===== */
+/* ===== RENDER do terminal ===== */
 function render() {
   if (matrixRunning) return;
   terminal.textContent = buffer;
   terminal.appendChild(cursor);
 }
 
-/* ===== MATRIX + VÍDEO ===== */
+/* ===== VIDEO + MATRIX START/STOP ===== */
 function startMatrix() {
   matrixRunning = true;
-
   canvas.style.opacity   = "1";
-  video.style.opacity    = "0.35";   // vídeo aparece
+  video.style.opacity    = "0.35";
+  crtCanvas.style.opacity = "1";
+  crtDiv.style.opacity = "1";
   terminal.style.opacity = "0";
-
-  video.play();
+  // small warmup: reset timers
+  resetColumnStates();
+  video.play().catch(()=>{ /* autoplay may be blocked in browsers without user gesture; it's fine */ });
 }
 
 function stopMatrix() {
   matrixRunning = false;
-
-  canvas.style.opacity = "0";
-  video.style.opacity  = "0";       // vídeo some
-
-  video.pause();
-  video.currentTime = 0;
-
+  canvas.style.opacity   = "0";
+  video.style.opacity    = "0";
+  crtCanvas.style.opacity = "0";
+  // keep CRT gradient visible but subtle
+  // stop video
+  try { video.pause(); video.currentTime = 0; } catch(e){}
   setTimeout(() => {
     terminal.style.opacity = "1";
     render();
   }, 1200);
 }
 
-/* ===== MATRIX ENGINE ===== */
-let cols, drops;
+/* ===== MATRIX ENGINE AVANÇADO (Katakana + trails + velocidades por coluna) ===== */
+
+// Katakana (caracteres usados no filme)
+const JAPANESE = "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲンヴヵヶ";
+
+// grid / sizing
+let cols, drops, baseFontSize = 22;
+let columnSpeed = [];      // velocidade base por coluna (pixels per frame unit)
+let columnMultiplier = []; // multiplicador temporário (acelera/trava)
+let columnTimer = [];      // timer para estado de aceleração/trava
+let columnState = [];      // "normal" | "accel" | "stalled"
+let lastTime = performance.now();
 
 function resize() {
-  canvas.width  = innerWidth;
-  canvas.height = innerHeight;
-  cols = Math.floor(canvas.width / 18);
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  canvas.width  = innerWidth * dpr;
+  canvas.height = innerHeight * dpr;
+  canvas.style.width  = innerWidth + "px";
+  canvas.style.height = innerHeight + "px";
+  ctx.scale(dpr, dpr);
+  ctx.font = `${baseFontSize}px monospace`;
+
+  // CRT canvas
+  crtCanvas.width  = innerWidth * dpr;
+  crtCanvas.height = innerHeight * dpr;
+  crtCanvas.style.width = innerWidth + "px";
+  crtCanvas.style.height = innerHeight + "px";
+  crtCtx.scale(dpr, dpr);
+
+  cols = Math.floor(innerWidth / 18);
   drops = Array(cols).fill(0);
+
+  // init arrays
+  columnSpeed = new Array(cols).fill(1.0);        // base speed
+  columnMultiplier = new Array(cols).fill(1.0);   // dynamic multiplier
+  columnTimer = new Array(cols).fill(0);
+  columnState = new Array(cols).fill("normal");
+
+  // small randomness per column base speed
+  for (let i=0;i<cols;i++){
+    columnSpeed[i] = 0.9 + Math.random() * 1.4; // base small variance
+  }
 }
 resize();
 addEventListener("resize", resize);
 
-function matrixLoop() {
-  if (matrixRunning) {
-    ctx.fillStyle = "rgba(0,0,0,0.02)";
-    ctx.fillRect(0,0,canvas.width,canvas.height);
+/* choose char: 90% katakana, 10% ascii */
+function getMatrixChar() {
+  if (Math.random() < 0.9) {
+    return JAPANESE[Math.floor(Math.random() * JAPANESE.length)];
+  } else {
+    return String.fromCharCode(33 + Math.random() * 94);
+  }
+}
 
-    ctx.fillStyle = "#2563eb";
-    ctx.font = "20px monospace";
+/* reset states (called on start) */
+function resetColumnStates() {
+  for (let i=0;i<cols;i++){
+    columnMultiplier[i] = 1.0;
+    columnTimer[i] = 0;
+    columnState[i] = "normal";
+  }
+}
 
-    for (let i = 0; i < drops.length; i++) {
-      const char = String.fromCharCode(33 + Math.random() * 94);
-      ctx.fillText(char, i * 18, drops[i] * 20);
-
-      if (drops[i] * 20 > canvas.height && Math.random() > 0.975) {
-        drops[i] = 0;
+/* update column state: possibly trigger accel or stall */
+function updateColumnStates() {
+  for (let i = 0; i < cols; i++) {
+    if (columnTimer[i] > 0) {
+      columnTimer[i]--;
+      if (columnTimer[i] === 0) {
+        // return to normal
+        columnMultiplier[i] = 1.0;
+        columnState[i] = "normal";
       }
-      drops[i]++;
+      continue;
+    }
+    // random triggers
+    const r = Math.random();
+    // small chance to accelerate strongly
+    if (r > 0.995) {
+      columnState[i] = "accel";
+      columnMultiplier[i] = 2 + Math.random() * 4; // 2x..6x
+      columnTimer[i] = 20 + Math.floor(Math.random() * 70); // frames
+      continue;
+    }
+    // small chance to stall
+    if (r < 0.002) {
+      columnState[i] = "stalled";
+      columnMultiplier[i] = 0.0;
+      columnTimer[i] = 10 + Math.floor(Math.random() * 90);
+      continue;
+    }
+    // otherwise small jitter
+    if (r > 0.98) {
+      columnMultiplier[i] = 1.2 + Math.random() * 0.8; // light boost
+      columnTimer[i] = 8 + Math.floor(Math.random() * 20);
+      columnState[i] = "normal";
     }
   }
+}
+
+/* render matrix each frame */
+function matrixLoop(now) {
+  const dt = (now - lastTime) || 16;
+  lastTime = now;
+
+  if (matrixRunning) {
+    // clear with slight opacity for trail effect
+    ctx.fillStyle = "rgba(0,0,0,0.06)";
+    ctx.fillRect(0,0,canvas.width / (window.devicePixelRatio || 1), canvas.height / (window.devicePixelRatio || 1));
+
+    ctx.textBaseline = "top";
+    ctx.font = `${baseFontSize}px monospace`;
+
+    updateColumnStates();
+
+    for (let i = 0; i < drops.length; i++) {
+      const speed = columnSpeed[i] * columnMultiplier[i];
+
+      // chance to draw the bright head char
+      const headChar = getMatrixChar();
+
+      // bright head (first char)
+      ctx.fillStyle = "#bff3ff";
+      ctx.shadowColor = "#bff3ff";
+      ctx.shadowBlur = 8;
+      ctx.globalAlpha = 1;
+      ctx.fillText(headChar, i * 18, drops[i] * 20);
+
+      // disable shadow for trails
+      ctx.shadowBlur = 0;
+
+      // trails (a few chars above with progressive fade)
+      const trailLength = 6;
+      for (let t = 1; t <= trailLength; t++) {
+        const alpha = Math.max(0, 1 - t * 0.16);
+        ctx.globalAlpha = alpha;
+        // slightly darker for distant trail
+        ctx.fillStyle = "#2563eb";
+        // draw a char for trail (can be different)
+        const ch = getMatrixChar();
+        ctx.fillText(ch, i * 18, (drops[i] - t) * 20);
+      }
+
+      // restore alpha
+      ctx.globalAlpha = 1;
+
+      // move drop; multiply speed by dt/16 to keep time-based
+      const deltaRows = speed * (dt / 16);
+      drops[i] += deltaRows;
+
+      // reset condition
+      if (drops[i] * 20 > innerHeight + 50 && Math.random() > 0.98) {
+        drops[i] = 0;
+      }
+    }
+  }
+
+  // draw CRT noise synchronized (stronger when matrixRunning)
+  drawCRTNoise(now);
+
   requestAnimationFrame(matrixLoop);
 }
 
+requestAnimationFrame(matrixLoop);
+
+/* ===== CRT NOISE + SCANLINES (dinâmico) =====
+   - desenha ruido em baixa resolução para economizar CPU
+   - adiciona scanlines e flicker
+   - intensidade varia com matrixRunning e com flares de colunas (we approximate)
+*/
+let noiseTicker = 0;
+function drawCRTNoise(now) {
+  // if canvas size changed, ensure width/height are OK (handled in resize)
+  const w = crtCanvas.width / (window.devicePixelRatio || 1);
+  const h = crtCanvas.height / (window.devicePixelRatio || 1);
+
+  // intensity (0..1)
+  const base = matrixRunning ? 0.18 : 0.02;
+  // modulate by a subtle flicker
+  const flick = 0.5 + 0.5 * Math.sin(now / 120);
+  const intensity = Math.min(1, base * flick);
+
+  // adjust opacity of the canvas element
+  crtCanvas.style.opacity = `${Math.min(1, intensity * 2)}`;
+
+  // clear
+  crtCtx.clearRect(0,0,crtCanvas.width, crtCanvas.height);
+
+  // draw low-res noise by filling random rectangles (fast)
+  const cell = 3; // size of pixel blocks
+  const colsN = Math.ceil(w / cell);
+  const rowsN = Math.ceil(h / cell);
+
+  // number of noise rectangles proportional to intensity
+  const noiseAmount = Math.floor(colsN * rowsN * intensity * 0.35);
+
+  for (let n = 0; n < noiseAmount; n++) {
+    const x = Math.floor(Math.random() * colsN) * cell;
+    const y = Math.floor(Math.random() * rowsN) * cell;
+    const alpha = 0.02 + Math.random() * 0.08; // subtle specks
+    crtCtx.fillStyle = `rgba(255,255,255,${alpha})`;
+    crtCtx.fillRect(x, y, cell, cell);
+  }
+
+  // scanlines overlay
+  crtCtx.globalCompositeOperation = "overlay";
+  const scanlineAlpha = 0.03 + Math.random() * 0.03;
+  for (let y = 0; y < h; y += 2) {
+    crtCtx.fillStyle = `rgba(0,0,0,${scanlineAlpha})`;
+    crtCtx.fillRect(0, y, w, 1);
+  }
+  crtCtx.globalCompositeOperation = "source-over";
+
+  // horizontal subtle banding to emulate phosphor
+  crtCtx.fillStyle = `rgba(37,99,235,${0.004 * flick})`;
+  crtCtx.fillRect(0, 0, w, h);
+
+  // occasional stronger burst synced approximately to column accelerations:
+  noiseTicker++;
+  if (noiseTicker % 120 === 0) {
+    // small burst
+    const burstAlpha = 0.06 + Math.random() * 0.08;
+    crtCtx.fillStyle = `rgba(255,255,255,${burstAlpha})`;
+    crtCtx.fillRect(Math.random() * w * 0.2, Math.random() * h * 0.2, w * (0.6 + Math.random() * 0.4), h * (0.6 + Math.random() * 0.4));
+  }
+}
+
+/* ===== kick off and initial render ===== */
 render();
-matrixLoop();
 </script>
 </body>
 </html>

@@ -186,7 +186,8 @@ function resize() {
   canvas.style.width  = innerWidth + "px";
   canvas.style.height = innerHeight + "px";
   ctx.scale(dpr, dpr);
-  ctx.font = `${baseFontSize}px monospace`;
+  ctx.font = `${baseFontSize}px "Matrix code NFI", monospace`;
+  ctx.letterSpacing = "2px";
 
   crtCanvas.width  = innerWidth * dpr;
   crtCanvas.height = innerHeight * dpr;
@@ -194,7 +195,7 @@ function resize() {
   crtCanvas.style.height = innerHeight + "px";
   crtCtx.scale(dpr, dpr);
 
-  cols = Math.floor(innerWidth / 18);
+  cols = Math.floor(innerWidth / 22);
   drops = Array(cols).fill(0);
 
   columnSpeed = new Array(cols).fill(1.0);
@@ -203,7 +204,7 @@ function resize() {
   columnState = new Array(cols).fill("normal");
 
   for (let i=0;i<cols;i++){
-    columnSpeed[i] = 0.9 + Math.random() * 1.4;
+    columnSpeed[i] = 1.2 + Math.random() * 2.5;
   }
 }
 resize();
@@ -284,16 +285,16 @@ function matrixLoop(now) {
       const headChar = getMatrixChar();
 
       ctx.fillStyle = "#bff3ff";
-      ctx.shadowColor = "#bff3ff";
-      ctx.shadowBlur = 8;
+      ctx.shadowColor = "#aaf6ff";
+      ctx.shadowBlur = 12;
       ctx.globalAlpha = 1;
       ctx.fillText(headChar, i * 18, drops[i] * 20);
 
       ctx.shadowBlur = 0;
 
-      const trailLength = 6;
+      const trailLength = 3;
       for (let t = 1; t <= trailLength; t++) {
-        const alpha = Math.max(0, 1 - t * 0.16);
+        const alpha = Math.max(0, 1 - t * 0.23);
         ctx.globalAlpha = alpha;
         ctx.fillStyle = "#2563eb";
         const ch = getMatrixChar();
@@ -369,4 +370,5 @@ render();
 </script>
 </body>
 </html>
+
 

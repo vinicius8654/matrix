@@ -100,7 +100,7 @@ document.addEventListener("keydown", (e) => {
 
 // Matrix automático por inatividade
 setInterval(() => {
-  if (!matrixActive && Date.now() - lastTypeTime > 6000) {
+  if (!matrixActive && Date.now() - lastTypeTime > 4000) {
     matrixActive = true;
     send("__START_MATRIX__");
   }
@@ -109,3 +109,4 @@ setInterval(() => {
 
 </body>
 </html>
+

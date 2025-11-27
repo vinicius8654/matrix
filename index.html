@@ -1,116 +1,104 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html>
 <head>
-<meta charset="utf-8" />
-<title>Viewer - Matrix Avançada (Equilibrado)</title>
-<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta charset="UTF-8">
+<title>Viewer - Matrix Avançada</title>
+
 <style>
-  * { margin:0; padding:0; box-sizing: border-box; }
-  html,body { height:100%; }
-  body {
-    background:black;
-    color:#2563eb;
-    font-family:monospace;
-    overflow:hidden;
-  }
+* { margin:0; padding:0; box-sizing: border-box; }
+html,body { height:100%; }
 
-  /* MATRIX CANVAS */
-  #matrixCanvas {
-    position:fixed;
-    inset:0;
-    background:black;
-    z-index:2;
-    opacity:0;
-    transition:opacity 1.0s ease;
-  }
+body {
+  background:black;
+  color:#2563eb;
+  font-family:monospace;
+  overflow:hidden;
+}
 
-  /* CRT NOISE CANVAS (dinâmico) */
-  #crtCanvas {
-    position:fixed;
-    inset:0;
-    z-index:10000;
-    pointer-events:none;
-    opacity:0;
-    transition:opacity 0.5s linear;
-  }
+/* MATRIX CANVAS */
+#matrixCanvas {
+  position:fixed;
+  inset:0;
+  background:black;
+  z-index:2;
+  opacity:0;
+  transition:opacity 1.2s ease;
+}
 
-  /* TERMINAL */
-  #terminal {
-    position:fixed;
-    inset:0;
-    padding:28px;
-    font-size:18px;
-    white-space:pre-wrap;
-    z-index:1;
-    background:black;
-    opacity:1;
-    transition:opacity 1.0s ease;
-  }
+/* CRT NOISE CANVAS (dinâmico) */
+#crtCanvas {
+  position:fixed;
+  inset:0;
+  z-index:10000;
+  pointer-events:none;
+  opacity:0;
+  transition:opacity 0.5s linear;
+}
 
-  .cursor { animation:blink 1s steps(1) infinite; }
-  @keyframes blink { 50% { opacity:0; } }
+/* TERMINAL */
+#terminal {
+  position:fixed;
+  inset:0;
+  padding:40px;
+  font-size:22px;
+  white-space:pre-wrap;
+  z-index:1;
+  background:black;
+  opacity:1;
+  transition:opacity 1.2s ease;
+}
 
-  #crt {
-    position:fixed;
-    inset:0;
-    pointer-events:none;
-    z-index:9999;
-    background:
-      radial-gradient(circle at center, rgba(37,99,235,0.05), transparent 60%),
-      repeating-linear-gradient(
-        to bottom,
-        rgba(37,99,235,0.10) 0px,
-        rgba(37,99,235,0.03) 2px,
-        rgba(0,0,0,0.35) 4px
-      );
-    mix-blend-mode: screen;
-    animation:crtFlicker .14s infinite;
-  }
-  @keyframes crtFlicker { 50% { opacity:0.88; } }
+/* CURSOR */
+.cursor {
+  animation:blink 1s steps(1) infinite;
+}
 
-  @keyframes shakeAnim {
-    0% { transform: translate(0,0); }
-    20% { transform: translate(-6px,3px); }
-    40% { transform: translate(5px,-3px); }
-    60% { transform: translate(-4px,4px); }
-    80% { transform: translate(4px,-2px); }
-    100% { transform: translate(0,0); }
-  }
+@keyframes blink {
+  50% { opacity:0; }
+}
 
-  canvas { image-rendering: pixelated; will-change: transform, filter; }
-  /* small HUD (hidden by default) */
-  #gestureHint {
-    position:fixed;
-    bottom:14px;
-    left:50%;
-    transform:translateX(-50%);
-    background:rgba(0,0,0,0.45);
-    color:#bfe9ff;
-    font-size:12px;
-    padding:6px 10px;
-    border-radius:8px;
-    z-index:12000;
-    pointer-events:none;
-    opacity:0;
-    transition:opacity .6s;
-  }
-  #gestureHint.show { opacity:1; }
+/* CRT STATIC GRADIENT OVERLAY (subtle) */
+#crt {
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  z-index:9999;
+  background:
+    radial-gradient(circle at center, rgba(37,99,235,0.06), transparent 55%),
+    repeating-linear-gradient(
+      to bottom,
+      rgba(37,99,235,0.12) 0px,
+      rgba(37,99,235,0.04) 2px,
+      rgba(0,0,0,0.35) 4px
+    );
+  mix-blend-mode: screen;
+  animation:crtFlicker .12s infinite;
+}
+
+@keyframes crtFlicker {
+  50% { opacity:0.85; }
+}
+
+canvas {
+  image-rendering: pixelated;
+}
 </style>
 </head>
+
 <body>
 
-<canvas id="matrixCanvas" aria-hidden="true"></canvas>
-<div id="terminal" aria-hidden="false"></div>
-<div id="crt" aria-hidden="true"></div>
-<canvas id="crtCanvas" aria-hidden="true"></canvas>
-<div id="gestureHint">Toque • Duplo toque • Swipe ↑/↓ (ativos quando a Matrix iniciar)</div>
+<canvas id="matrixCanvas"></canvas>
+<div id="terminal"></div>
+<div id="crt"></div>
+<canvas id="crtCanvas"></canvas>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script>
-/* =================== CONFIGURAÇÃO =================== */
+/* ====== CONFIGURAÇÃO (Manteve igual) ====== */
 const SUPABASE_URL = "https://cjbfcihsswjvdadzjfen.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqYmZjaWhzc3dqdmRhZHpqZmVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxMDI2NTIsImV4cCI6MjA3OTY3ODY1Mn0.121szlnOSL7es3cSJcnzVtrLmHcxw3p4m9U1S5HvSj0";
+const SUPABASE_ANON_KEY =
+"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqYmZjaWhzc3dqdmRhZHpqZmVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxMDI2NTIsImV4cCI6MjA3OTY3ODY1Mn0.121szlnOSL7es3cSJcnzVtrLmHcxw3p4m9U1S5HvSj0";
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -121,7 +109,6 @@ const ctx        = canvas.getContext("2d");
 const crtCanvas  = document.getElementById("crtCanvas");
 const crtCtx     = crtCanvas.getContext("2d");
 const crtDiv     = document.getElementById("crt");
-const hint       = document.getElementById("gestureHint");
 
 let buffer = "";
 let matrixRunning = false;
@@ -130,189 +117,134 @@ let cursor = document.createElement("span");
 cursor.className = "cursor";
 cursor.textContent = "█";
 
-/* =================== Realtime (Supabase) =================== */
+/* ===== Supabase realtime channel ===== */
 const channel = supabase.channel("matrix-live");
+
 channel
   .on("broadcast", { event: "message" }, (payload) => {
     const data = payload.payload.data;
+
     if (data === "__START_MATRIX__") { startMatrix(); return; }
     if (data === "__STOP_MATRIX__")  { stopMatrix(); return; }
     if (data === "__CLEAR__")        { buffer = ""; render(); return; }
 
     if (data === "__FAST_CLEAR__") {
       const iv = setInterval(() => {
-        if (buffer.length > 0) { buffer = buffer.slice(0, -6); render(); }
-        else clearInterval(iv);
+        if (buffer.length > 0) {
+          buffer = buffer.slice(0, -6);
+          render();
+        } else {
+          clearInterval(iv);
+        }
       }, 10);
       return;
     }
 
-    // remote effects
-    if (data === "__FLASH__") { triggerEffect("FLASH"); return; }
-    if (data === "__SHAKE__") { triggerEffect("SHAKE"); return; }
-    if (data === "__GLITCH__") { triggerEffect("GLITCH"); return; }
-    if (data === "__RAIN_FAST__") { triggerEffect("RAIN_FAST"); return; }
-    if (data === "__RAINBOW__") { triggerEffect("RAINBOW"); return; }
-
-    if (data === "__BACKSPACE__") buffer = buffer.slice(0, -1);
-    else buffer += data;
+    if (data === "__BACKSPACE__") {
+      buffer = buffer.slice(0, -1);
+    } else {
+      buffer += data;
+    }
 
     render();
   })
   .subscribe();
 
-/* =================== Terminal render =================== */
+/* ===== RENDER terminal ===== */
 function render() {
   if (matrixRunning) return;
   terminal.textContent = buffer;
   terminal.appendChild(cursor);
 }
 
-/* =================== ASCII LOGO (every 2min) =================== */
-const ASCII_LOGO = [
-  "  __   __ ",
-  " /  \\ /  \\",
-  "| ( ) ( ) |",
-  " \\  / \\  / ",
-  "  \\/   \\/  ",
-  "  WAKE UP  "
-];
-let asciiIntervalId = null;
-function showAsciiLogo(duration = 1000) {
-  if (!matrixRunning) return;
-  ctx.save();
-  // scaled drawing - avoid heavy shadows on mobile
-  const small = isMobileDevice();
-  ctx.font = `${Math.max(18, small?20:28)}px monospace`;
-  ctx.textBaseline = "middle";
-  ctx.textAlign = "center";
-  ctx.shadowColor = "#ffffff";
-  ctx.shadowBlur = small ? 8 : 16;
-  const cx = innerWidth / 2;
-  const cy = innerHeight / 2;
-  const lineHeight = Math.max(26, small?28:34);
-  for (let i = 0; i < ASCII_LOGO.length; i++) {
-    const y = cy - ((ASCII_LOGO.length - 1) / 2) * lineHeight + i * lineHeight;
-    ctx.fillStyle = "rgba(0,0,0,0.5)";
-    const txt = ASCII_LOGO[i];
-    const w = ctx.measureText(txt).width;
-    ctx.fillRect(cx - w/2 - 12, y - (lineHeight/2 - 6), w + 24, lineHeight - 4);
-    ctx.fillStyle = "#bff3ff";
-    ctx.fillText(txt, cx, y);
-  }
-  ctx.restore();
+/* ===== MATRIX START/STOP (sem vídeo) ===== */
+function startMatrix() {
+  matrixRunning = true;
+  canvas.style.opacity = "1";
+  crtCanvas.style.opacity = "1";
+  crtDiv.style.opacity = "1";
+  terminal.style.opacity = "0";
+  resetColumnStates();
+}
+
+function stopMatrix() {
+  matrixRunning = false;
+  canvas.style.opacity = "0";
+  crtCanvas.style.opacity = "0";
 
   setTimeout(() => {
-    // small fade nudge
-    ctx.fillStyle = "rgba(0,0,0,0.04)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-  }, duration);
+    terminal.style.opacity = "1";
+    render();
+  }, 1200);
 }
 
-/* =================== Performance-tuned Matrix Engine (Equilibrado) =================== */
+/* ===== MATRIX ENGINE ===== */
+const JAPANESE =
+"アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲンヴヵヶ";
 
-/* Character source */
-const JAPANESE = "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲンヴヵヶ";
-const ALNUM = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-
-/* Pre-generate a character pool to avoid heavy randomization per char */
-let CHAR_POOL = [];
-function buildCharPool(size = 800) {
-  CHAR_POOL = new Array(size);
-  const combined = JAPANESE + ALNUM;
-  for (let i = 0; i < size; i++) {
-    CHAR_POOL[i] = combined.charAt(Math.floor(Math.random() * combined.length));
-  }
-}
-
-/* Adaptive parameters */
-let baseFontSize = 20;            // will be adjusted for device
-let cols = 0;
-let drops = [];                   // vertical position (rows) per column
+let cols, drops;
+let baseFontSize = 22;
 let columnSpeed = [];
 let columnMultiplier = [];
 let columnTimer = [];
 let columnState = [];
 let lastTime = performance.now();
 
-/* FPS / adaptation */
-const TARGET_FPS = 36;
-let lastFrameTime = 0;
-let frameCounter = 0;
-let fpsSampleStart = performance.now();
-let measuredFps = TARGET_FPS;
-let skipFrames = 0;               // frame skipping: update only every (skipFrames+1) frames
+function resize() {
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
 
-/* Device hints */
-function isMobileDevice() {
-  return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth <= 720;
-}
-
-/* Initialize/resets sizing and arrays */
-function resizeAndInit() {
-  const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2)); // cap DPR for balance
-  // adaptive font size
-  const mobile = isMobileDevice();
-  baseFontSize = mobile ? Math.max(14, Math.round(window.innerWidth / 25)) : 22;
-  // character cell width/height approximations
-  const cellW = Math.max(12, Math.floor(baseFontSize * 0.95));
-  const cellH = Math.max(14, Math.floor(baseFontSize * 1.1));
-
-  // use slightly reduced canvas backing for mobile for performance
-  const backingScale = mobile ? (dpr * 0.9) : dpr;
-
-  // reset transforms to avoid cumulative scaling
-  ctx.setTransform(1,0,0,1,0,0);
-  crtCtx.setTransform(1,0,0,1,0,0);
-
-  canvas.width = Math.floor(window.innerWidth * backingScale);
-  canvas.height = Math.floor(window.innerHeight * backingScale);
-  canvas.style.width = window.innerWidth + "px";
-  canvas.style.height = window.innerHeight + "px";
-  ctx.scale(backingScale, backingScale);
+  canvas.width  = innerWidth * dpr;
+  canvas.height = innerHeight * dpr;
+  canvas.style.width  = innerWidth + "px";
+  canvas.style.height = innerHeight + "px";
+  ctx.scale(dpr, dpr);
   ctx.font = `${baseFontSize}px monospace`;
 
-  crtCanvas.width = Math.floor(window.innerWidth * backingScale);
-  crtCanvas.height = Math.floor(window.innerHeight * backingScale);
-  crtCanvas.style.width = window.innerWidth + "px";
-  crtCanvas.style.height = window.innerHeight + "px";
-  crtCtx.scale(backingScale, backingScale);
+  crtCanvas.width  = innerWidth * dpr;
+  crtCanvas.height = innerHeight * dpr;
+  crtCanvas.style.width  = innerWidth + "px";
+  crtCanvas.style.height = innerHeight + "px";
+  crtCtx.scale(dpr, dpr);
 
-  // compute columns - lower count on mobile and when width small
-  cols = Math.max(8, Math.floor(window.innerWidth / cellW));
-  // allocate arrays once
-  drops = new Array(cols);
-  columnSpeed = new Array(cols);
-  columnMultiplier = new Array(cols);
-  columnTimer = new Array(cols);
-  columnState = new Array(cols);
+  cols = Math.floor(innerWidth / 18);
+  drops = Array(cols).fill(0);
+
+  columnSpeed     = new Array(cols).fill(1.0);
+  columnMultiplier = new Array(cols).fill(1.0);
+  columnTimer      = new Array(cols).fill(0);
+  columnState      = new Array(cols).fill("normal");
 
   for (let i = 0; i < cols; i++) {
-    drops[i] = Math.floor(Math.random() * 20); // start scattered
-    columnSpeed[i] = (0.7 + Math.random() * 1.6) * (mobile ? 0.9 : 1.0);
+    columnSpeed[i] = 0.9 + Math.random() * 1.4;
+  }
+}
+
+resize();
+addEventListener("resize", resize);
+
+function getMatrixChar() {
+  const r = Math.random();
+
+  if (r < 0.50)
+    return String.fromCharCode(48 + Math.floor(Math.random() * 10));
+
+  if (r < 0.80)
+    return String.fromCharCode(65 + Math.floor(Math.random() * 26));
+
+  return JAPANESE[Math.floor(Math.random() * JAPANESE.length)];
+}
+
+function resetColumnStates() {
+  for (let i=0; i<cols; i++) {
     columnMultiplier[i] = 1.0;
     columnTimer[i] = 0;
     columnState[i] = "normal";
   }
-
-  // rebuild char pool tuned to cols (smaller on tiny screens)
-  buildCharPool(Math.max(300, Math.min(1200, cols * 20)));
-}
-resizeAndInit();
-window.addEventListener("resize", () => {
-  // small debounce
-  clearTimeout(window._matResizeTimer);
-  window._matResizeTimer = setTimeout(resizeAndInit, 120);
-});
-
-/* Utility: pick char from pool */
-function getPoolChar() {
-  return CHAR_POOL[Math.floor(Math.random() * CHAR_POOL.length)];
 }
 
-/* Column state updater (lightweight) */
 function updateColumnStates() {
   for (let i = 0; i < cols; i++) {
+
     if (columnTimer[i] > 0) {
       columnTimer[i]--;
       if (columnTimer[i] === 0) {
@@ -321,77 +253,37 @@ function updateColumnStates() {
       }
       continue;
     }
+
     const r = Math.random();
+
     if (r > 0.995) {
       columnState[i] = "accel";
-      columnMultiplier[i] = 2 + Math.random() * 3;
-      columnTimer[i] = 14 + Math.floor(Math.random() * 50);
+      columnMultiplier[i] = 2 + Math.random() * 4;
+      columnTimer[i] = 20 + Math.floor(Math.random() * 70);
       continue;
     }
+
     if (r < 0.002) {
       columnState[i] = "stalled";
       columnMultiplier[i] = 0.0;
-      columnTimer[i] = 8 + Math.floor(Math.random() * 60);
+      columnTimer[i] = 10 + Math.floor(Math.random() * 90);
       continue;
     }
+
     if (r > 0.98) {
-      columnMultiplier[i] = 1.1 + Math.random() * 0.7;
-      columnTimer[i] = 6 + Math.floor(Math.random() * 16);
+      columnMultiplier[i] = 1.2 + Math.random() * 0.8;
+      columnTimer[i] = 8 + Math.floor(Math.random() * 20);
       columnState[i] = "normal";
     }
   }
 }
 
-/* Adaptive controller: measure FPS and reduce density if needed */
-function adaptiveController(now) {
-  frameCounter++;
-  const elapsed = now - fpsSampleStart;
-  if (elapsed >= 1000) {
-    measuredFps = Math.round((frameCounter / elapsed) * 1000);
-    frameCounter = 0;
-    fpsSampleStart = now;
-
-    // adaptation logic: if measured FPS below threshold, increase skipFrames or reduce cols
-    if (measuredFps < 24) {
-      // increase skipping up to 3 (update every 4 frames)
-      skipFrames = Math.min(3, skipFrames + 1);
-      // if still bad and we can reduce columns, do it slowly
-      if (cols > 20 && skipFrames >= 2) {
-        const reduceBy = Math.max(2, Math.floor(cols * 0.06));
-        cols = Math.max(12, cols - reduceBy);
-        // reallocate shorter arrays preserving prefix
-        drops.length = cols;
-        columnSpeed.length = cols;
-        columnMultiplier.length = cols;
-        columnTimer.length = cols;
-        columnState.length = cols;
-      }
-    } else if (measuredFps > 38) {
-      // we can be more detailed, reduce skipping
-      skipFrames = Math.max(0, skipFrames - 1);
-    }
-  }
-}
-
-/* Draw loop (single RAF) */
 function matrixLoop(now) {
-  // throttle by target FPS
-  if (!lastFrameTime) lastFrameTime = now;
-  const dt = now - lastFrameTime;
-  const minDt = 1000 / TARGET_FPS;
-  if (dt < minDt) {
-    requestAnimationFrame(matrixLoop);
-    return;
-  }
-  lastFrameTime = now;
+  const dt = (now - lastTime) || 16;
+  lastTime = now;
 
-  // adaptive measurement
-  adaptiveController(now);
-
-  // only draw when running
   if (matrixRunning) {
-    // fade background (lighter on mobile to reduce repaints)
-    ctx.fillStyle = "rgba(0,0,0,0.035)";
+    ctx.fillStyle = "rgba(0,0,0,0.03)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.textBaseline = "top";
@@ -399,298 +291,102 @@ function matrixLoop(now) {
 
     updateColumnStates();
 
-    // compute color base (rainbow mode handled)
-    const nowMs = now;
-    const trailLength = 5; // slightly smaller trail in equilibrado
-    const mobile = isMobileDevice();
-    const shadow = !mobile && 8; // disable heavy shadows on mobile
-
-    for (let i = 0; i < cols; i++) {
-      // support frame skipping
-      if (skipFrames > 0 && (Math.floor(nowMs / 16) % (skipFrames + 1) !== 0)) {
-        // still advance positions slightly to avoid freeze effect
-        drops[i] += 0.02 * (columnSpeed[i] * columnMultiplier[i]);
-        continue;
-      }
-
+    for (let i = 0; i < drops.length; i++) {
       const speed = columnSpeed[i] * columnMultiplier[i];
-      const headChar = getPoolChar();
 
-      let headColor = "#bff3ff";
-      let trailColor = "#2563eb";
-
-      if (rainbowMode) {
-        const hue = Math.floor(((i / Math.max(1, cols)) * 360 + (nowMs / 30)) % 360);
-        headColor = `hsl(${hue} 85% 68%)`;
-        trailColor = `hsl(${(hue+20)%360} 75% 48%)`;
-      }
-
-      ctx.fillStyle = headColor;
-      if (shadow) {
-        ctx.shadowColor = headColor;
-        ctx.shadowBlur = shadow;
-      } else {
-        ctx.shadowBlur = 0;
-      }
+      const headChar = getMatrixChar();
+      ctx.fillStyle = "#bff3ff";
+      ctx.shadowColor = "#bff3ff";
+      ctx.shadowBlur = 8;
       ctx.globalAlpha = 1;
-      ctx.fillText(headChar, i * (baseFontSize * 0.95), drops[i] * (baseFontSize * 1.02));
+      ctx.fillText(headChar, i * 18, drops[i] * 20);
 
       ctx.shadowBlur = 0;
 
-      // trail
+      const trailLength = 6;
       for (let t = 1; t <= trailLength; t++) {
-        const alpha = Math.max(0, 1 - t * 0.18);
+        const alpha = Math.max(0, 1 - t * 0.16);
         ctx.globalAlpha = alpha;
-        ctx.fillStyle = trailColor;
-        const ch = getPoolChar();
-        ctx.fillText(ch, i * (baseFontSize * 0.95), (drops[i] - t) * (baseFontSize * 1.02));
+        ctx.fillStyle = "#2563eb";
+        const ch = getMatrixChar();
+        ctx.fillText(ch, i * 18, (drops[i] - t) * 20);
       }
 
       ctx.globalAlpha = 1;
-      drops[i] += speed * (dt / 16);
 
-      // reset occasionally
-      if (drops[i] * (baseFontSize * 1.02) > innerHeight + 40 && Math.random() > 0.985) {
+      const deltaRows = speed * (dt / 16);
+      drops[i] += deltaRows;
+
+      if (drops[i] * 20 > innerHeight + 50 && Math.random() > 0.98) {
         drops[i] = 0;
       }
     }
-  } else {
-    // when not running, keep a tiny CRT flicker by lowering opacity (handled elsewhere)
   }
 
-  drawCRTNoise(nowMs);
+  drawCRTNoise(now);
   requestAnimationFrame(matrixLoop);
 }
+
 requestAnimationFrame(matrixLoop);
 
-/* =================== CRT Noise (lightweight) =================== */
+/* ===== CRT NOISE ===== */
 let noiseTicker = 0;
+
 function drawCRTNoise(now) {
-  const w = crtCanvas.width / (window.devicePixelRatio || 1);
+  const w = crtCanvas.width  / (window.devicePixelRatio || 1);
   const h = crtCanvas.height / (window.devicePixelRatio || 1);
 
-  const base = matrixRunning ? 0.12 : 0.02;
-  const flick = 0.45 + 0.55 * Math.sin(now / 120);
+  const base = matrixRunning ? 0.18 : 0.02;
+  const flick = 0.5 + 0.5 * Math.sin(now / 120);
   const intensity = Math.min(1, base * flick);
 
-  // slightly reduce on mobile for perf
-  const mobile = isMobileDevice();
-  crtCanvas.style.opacity = `${Math.min(1, intensity * (mobile ? 1.2 : 1.8))}`;
+  crtCanvas.style.opacity = `${Math.min(1, intensity * 2)}`;
 
   crtCtx.clearRect(0, 0, crtCanvas.width, crtCanvas.height);
 
-  const cell = mobile ? 4 : 3;
+  const cell = 3;
   const colsN = Math.ceil(w / cell);
   const rowsN = Math.ceil(h / cell);
-  const noiseAmount = Math.floor(colsN * rowsN * intensity * (mobile ? 0.14 : 0.35));
+  const noiseAmount = Math.floor(colsN * rowsN * intensity * 0.35);
 
   for (let n = 0; n < noiseAmount; n++) {
     const x = Math.floor(Math.random() * colsN) * cell;
     const y = Math.floor(Math.random() * rowsN) * cell;
-    const alpha = 0.01 + Math.random() * (mobile ? 0.04 : 0.08);
+    const alpha = 0.02 + Math.random() * 0.08;
     crtCtx.fillStyle = `rgba(255,255,255,${alpha})`;
     crtCtx.fillRect(x, y, cell, cell);
   }
 
   crtCtx.globalCompositeOperation = "overlay";
-  const scanlineAlpha = 0.02 + Math.random() * 0.03;
-  for (let y = 0; y < h; y += (mobile ? 3 : 2)) {
+
+  const scanlineAlpha = 0.03 + Math.random() * 0.03;
+  for (let y = 0; y < h; y += 2) {
     crtCtx.fillStyle = `rgba(0,0,0,${scanlineAlpha})`;
     crtCtx.fillRect(0, y, w, 1);
   }
+
   crtCtx.globalCompositeOperation = "source-over";
-  crtCtx.fillStyle = `rgba(37,99,235,${0.003 * flick})`;
+
+  crtCtx.fillStyle = `rgba(37,99,235,${0.004 * flick})`;
   crtCtx.fillRect(0, 0, w, h);
 
   noiseTicker++;
-  if (noiseTicker % 180 === 0 && !mobile) {
-    const burstAlpha = 0.04 + Math.random() * 0.06;
+
+  if (noiseTicker % 120 === 0) {
+    const burstAlpha = 0.06 + Math.random() * 0.08;
     crtCtx.fillStyle = `rgba(255,255,255,${burstAlpha})`;
-    crtCtx.fillRect(Math.random() * w * 0.2, Math.random() * h * 0.2, w * (0.5 + Math.random() * 0.4), h * (0.5 + Math.random() * 0.4));
+    crtCtx.fillRect(
+      Math.random() * w * 0.2,
+      Math.random() * h * 0.2,
+      w * (0.6 + Math.random() * 0.4),
+      h * (0.6 + Math.random() * 0.4)
+    );
   }
 }
 
-/* =================== Gestures (active only when matrixRunning) =================== */
-let lastTap = 0;
-let touchStartY = null;
-let touchEndY = null;
-let clickTimer = null;
-
-function matrixActive() { return matrixRunning === true; }
-
-/* touch handlers */
-document.addEventListener("touchstart", (e) => {
-  // allow starting the matrix with first interaction
-  if (!matrixRunning) {
-    startMatrix();
-    showGestureHintBrief();
-    return;
-  }
-  if (!matrixActive()) return;
-  touchStartY = e.changedTouches[0].screenY;
-}, {passive:true});
-
-document.addEventListener("touchend", (e) => {
-  if (!matrixActive()) return;
-  touchEndY = e.changedTouches[0].screenY;
-  if (touchStartY !== null) {
-    const diff = touchStartY - touchEndY;
-    if (Math.abs(diff) >= 50) {
-      if (diff > 0) triggerEffect("RAIN_FAST");
-      else triggerEffect("GLITCH");
-      touchStartY = null;
-      return;
-    }
-  }
-  const currentTap = Date.now();
-  const tapInterval = currentTap - lastTap;
-  if (tapInterval < 300) {
-    triggerEffect("SHAKE");
-    lastTap = 0;
-  } else {
-    triggerEffect("FLASH");
-    lastTap = currentTap;
-  }
-  touchStartY = null;
-}, {passive:true});
-
-/* desktop pointer */
-document.addEventListener("pointerup", (e) => {
-  if (!matrixActive()) return;
-  const now = Date.now();
-  const dt = now - (clickTimer || 0);
-  if (dt < 300) {
-    if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
-    triggerEffect("SHAKE");
-    lastTap = 0;
-  } else {
-    clickTimer = setTimeout(() => {
-      triggerEffect("FLASH");
-      clickTimer = null;
-    }, 280);
-    lastTap = now;
-  }
-});
-
-/* small HUD hint */
-function showGestureHintBrief() {
-  hint.classList.add("show");
-  setTimeout(() => hint.classList.remove("show"), 2500);
-}
-
-/* =================== Effects system =================== */
-function triggerEffect(type) {
-  switch (type) {
-    case "FLASH": flashScreen(); break;
-    case "SHAKE": shakeScreen(); break;
-    case "GLITCH": glitchScreen(); break;
-    case "RAIN_FAST": speedBoost(); break;
-    case "RAINBOW": startRainbow(4500); break;
-    default: console.warn("Efeito não reconhecido:", type);
-  }
-}
-
-/* effects implementations (optimized) */
-function flashScreen() {
-  canvas.style.transition = "none";
-  crtCanvas.style.transition = "none";
-  canvas.style.filter = "brightness(2.8)";
-  crtCanvas.style.filter = "brightness(1.8)";
-  setTimeout(() => {
-    canvas.style.filter = "";
-    crtCanvas.style.filter = "";
-  }, 140);
-}
-
-function shakeScreen() {
-  const el = document.body;
-  el.style.animation = "shakeAnim 0.34s";
-  canvas.style.animation = "shakeAnim 0.34s";
-  setTimeout(() => {
-    el.style.animation = "";
-    canvas.style.animation = "";
-  }, 340);
-}
-
-function glitchScreen() {
-  const origFilter = canvas.style.filter || "";
-  let steps = 0;
-  const iv = setInterval(() => {
-    steps++;
-    canvas.style.transform = `translate(${(Math.random()*8-4).toFixed(1)}px, ${(Math.random()*6-3).toFixed(1)}px)`;
-    canvas.style.filter = `contrast(${1 + Math.random()*0.9}) saturate(${1 + Math.random()*0.7})`;
-    if (steps >= 7) {
-      clearInterval(iv);
-      canvas.style.transform = "";
-      canvas.style.filter = origFilter;
-    }
-  }, 48);
-}
-
-function speedBoost() {
-  // quick multiplier on a percentage of columns for visual variety
-  const pct = Math.max(0.3, Math.min(0.7, 0.4 + Math.random()*0.4));
-  const count = Math.floor(cols * pct);
-  for (let i = 0; i < count; i++) columnMultiplier[i] *= 3.5;
-  setTimeout(() => { for (let i = 0; i < count; i++) columnMultiplier[i] /= 3.5; }, 2800);
-}
-
-function startRainbow(duration = 5000) {
-  rainbowMode = true;
-  rainbowExpires = performance.now() + duration;
-}
-
-/* =================== Matrix start/stop & helpers =================== */
-function startMatrix() {
-  if (matrixRunning) return;
-  matrixRunning = true;
-  canvas.style.opacity = "1";
-  crtCanvas.style.opacity = "1";
-  crtDiv.style.opacity = "1";
-  terminal.style.opacity = "0";
-  resetColumnStates();
-  // ASCII cycle
-  if (!asciiIntervalId) {
-    asciiIntervalId = setInterval(() => { if (matrixRunning) showAsciiLogo(900); }, 120000);
-  }
-  showGestureHintBrief();
-}
-
-function stopMatrix() {
-  matrixRunning = false;
-  canvas.style.opacity = "0";
-  crtCanvas.style.opacity = "0";
-  setTimeout(() => {
-    terminal.style.opacity = "1";
-    render();
-  }, 900);
-}
-
-function resetColumnStates() {
-  for (let i = 0; i < cols; i++) {
-    columnMultiplier[i] = 1.0;
-    columnTimer[i] = 0;
-    columnState[i] = "normal";
-  }
-}
-
-/* cleanup */
-window.addEventListener("beforeunload", () => {
-  if (asciiIntervalId) clearInterval(asciiIntervalId);
-});
-
-/* Start-up: small hint to user to touch to start on mobile */
-if (isMobileDevice()) {
-  terminal.textContent = "Toque para iniciar a Matrix — gestos ativados após o início.";
-  terminal.appendChild(cursor);
-} else {
-  terminal.textContent = "Clique/Toque para iniciar a Matrix.";
-  terminal.appendChild(cursor);
-}
-
-/* ensure char pool present */
-buildCharPool(800);
-
+/* inicial */
+render();
 </script>
+
 </body>
 </html>

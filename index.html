@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="mobile-web-app-capable" content="yes">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Viewer - Matrix Avançada (Otimizado)</title>
@@ -178,7 +181,31 @@ function stopMatrix() {
     render();
   }, 1200);
 }
+function enableFullscreen() {
+    const el = document.documentElement;
 
+    if (el.requestFullscreen) el.requestFullscreen();
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    else if (el.msRequestFullscreen) el.msRequestFullscreen();
+}
+
+// Detecta primeiro toque/clique e tenta fullscreen
+function setupFullscreenTrigger() {
+    const trigger = () => {
+        enableFullscreen();
+
+        // Remove listener depois do primeiro toque
+        document.removeEventListener("click", trigger);
+        document.removeEventListener("touchstart", trigger);
+    };
+
+    document.addEventListener("click", trigger, { once: true });
+    document.addEventListener("touchstart", trigger, { once: true });
+}
+
+// Executa assim que a página carrega
+window.addEventListener("load", setupFullscreenTrigger);
+  
 /* ===== ENV DETECTION & PERFORMANCE TUNING ===== */
 const ua = navigator.userAgent || "";
 const isMobile = /Mobi|Android|iPhone|iPad|Phone/i.test(ua);
@@ -425,3 +452,4 @@ render();
 
 </body>
 </html>
+

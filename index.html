@@ -1,8 +1,9 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Viewer - Matrix Avançada</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Viewer - Matrix Avançada (Otimizado)</title>
 
 <style>
 * { margin:0; padding:0; box-sizing: border-box; }
@@ -39,8 +40,8 @@ body {
 #terminal {
   position:fixed;
   inset:0;
-  padding:40px;
-  font-size:22px;
+  padding:24px;
+  font-size:20px;
   white-space:pre-wrap;
   z-index:1;
   background:black;
@@ -51,8 +52,9 @@ body {
 /* CURSOR */
 .cursor {
   animation:blink 1s steps(1) infinite;
+  display:inline-block;
+  margin-left:2px;
 }
-
 @keyframes blink {
   50% { opacity:0; }
 }
@@ -68,34 +70,33 @@ body {
     repeating-linear-gradient(
       to bottom,
       rgba(37,99,235,0.12) 0px,
-      rgba(37,99,235,0.04) 2px,
-      rgba(0,0,0,0.35) 4px
+      rgba(37,99,235,0.04) 3px,
+      rgba(0,0,0,0.35) 6px
     );
   mix-blend-mode: screen;
   animation:crtFlicker .12s infinite;
+  opacity:1;
 }
-
 @keyframes crtFlicker {
   50% { opacity:0.85; }
 }
 
-canvas {
-  image-rendering: pixelated;
-}
+/* pixelated */
+canvas { image-rendering: pixelated; }
 </style>
 </head>
-
 <body>
 
-<canvas id="matrixCanvas"></canvas>
-<div id="terminal"></div>
-<div id="crt"></div>
-<canvas id="crtCanvas"></canvas>
+<canvas id="matrixCanvas" aria-hidden="true"></canvas>
+<div id="terminal" aria-live="polite"></div>
+<div id="crt" aria-hidden="true"></div>
+<canvas id="crtCanvas" aria-hidden="true"></canvas>
 
+<!-- Supabase (mantive igual) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script>
-/* ====== CONFIGURAÇÃO (Manteve igual) ====== */
+/* ====== CONFIG (mantive) ====== */
 const SUPABASE_URL = "https://cjbfcihsswjvdadzjfen.supabase.co";
 const SUPABASE_ANON_KEY =
 "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqYmZjaWhzc3dqdmRhZHpqZmVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxMDI2NTIsImV4cCI6MjA3OTY3ODY1Mn0.121szlnOSL7es3cSJcnzVtrLmHcxw3p4m9U1S5HvSj0";
@@ -105,9 +106,9 @@ const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 /* DOM */
 const terminal   = document.getElementById("terminal");
 const canvas     = document.getElementById("matrixCanvas");
-const ctx        = canvas.getContext("2d");
+const ctx        = canvas.getContext("2d", { alpha: false });
 const crtCanvas  = document.getElementById("crtCanvas");
-const crtCtx     = crtCanvas.getContext("2d");
+const crtCtx     = crtCanvas.getContext("2d", { alpha: true });
 const crtDiv     = document.getElementById("crt");
 
 let buffer = "";
@@ -117,7 +118,7 @@ let cursor = document.createElement("span");
 cursor.className = "cursor";
 cursor.textContent = "█";
 
-/* ===== Supabase realtime channel ===== */
+/* ===== Supabase realtime channel (mantive) ===== */
 const channel = supabase.channel("matrix-live");
 
 channel
@@ -157,7 +158,7 @@ function render() {
   terminal.appendChild(cursor);
 }
 
-/* ===== MATRIX START/STOP (sem vídeo) ===== */
+/* ===== MATRIX START/STOP ===== */
 function startMatrix() {
   matrixRunning = true;
   canvas.style.opacity = "1";
@@ -178,62 +179,90 @@ function stopMatrix() {
   }, 1200);
 }
 
-/* ===== MATRIX ENGINE ===== */
-const JAPANESE =
-"アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲンヴヵヶ";
+/* ===== ENV DETECTION & PERFORMANCE TUNING ===== */
+const ua = navigator.userAgent || "";
+const isMobile = /Mobi|Android|iPhone|iPad|Phone/i.test(ua);
+const TARGET_FPS = isMobile ? 30 : 60; // throttle frames on mobile
+const FRAME_INTERVAL = 1000 / TARGET_FPS;
 
-let cols, drops;
-let baseFontSize = 22;
+/* ===== MATRIX ENGINE (OTIMIZADO) ===== */
+
+/* pre-cache char arrays to avoid repeated work */
+const JAPANESE_STR = "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲンヴヵヶ";
+const DIGITS = "0123456789";
+const LATIN = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const CHARS = (DIGITS + LATIN + JAPANESE_STR).split("");
+
+let cols = 0, drops = [];
+let baseFontSize = isMobile ? 18 : 22; // smaller on mobile
 let columnSpeed = [];
 let columnMultiplier = [];
 let columnTimer = [];
 let columnState = [];
-let lastTime = performance.now();
+let lastFrameTime = performance.now();
+let lastRenderTime = 0;
 
+/* visual spacing */
+const COL_WIDTH = isMobile ? 28 : 18;
+const ROW_HEIGHT = isMobile ? 22 : 20;
+
+/* limits */
+const MAX_COLS = 120;
+const MAX_NOISE_DOTS = isMobile ? 120 : 350;
+
+/* init/resizing - keep internal pixel density small on mobile */
 function resize() {
-  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  // choose a safe DPR: force 1 on mobile, cap at 2 on desktop to avoid explosion
+  const dpr = isMobile ? 1 : Math.min(window.devicePixelRatio || 1, 2);
 
-  canvas.width  = innerWidth * dpr;
-  canvas.height = innerHeight * dpr;
+  // internal (backing) resolution
+  canvas.width  = Math.floor(innerWidth * dpr);
+  canvas.height = Math.floor(innerHeight * dpr);
   canvas.style.width  = innerWidth + "px";
   canvas.style.height = innerHeight + "px";
+  // reset transform and scale to dpr
+  ctx.setTransform(1,0,0,1,0,0);
   ctx.scale(dpr, dpr);
   ctx.font = `${baseFontSize}px monospace`;
+  ctx.textBaseline = "top";
 
-  crtCanvas.width  = innerWidth * dpr;
-  crtCanvas.height = innerHeight * dpr;
+  crtCanvas.width  = Math.floor(innerWidth * dpr);
+  crtCanvas.height = Math.floor(innerHeight * dpr);
   crtCanvas.style.width  = innerWidth + "px";
   crtCanvas.style.height = innerHeight + "px";
+  crtCtx.setTransform(1,0,0,1,0,0);
   crtCtx.scale(dpr, dpr);
 
-  cols = Math.floor(innerWidth / 18);
-  drops = Array(cols).fill(0);
+  cols = Math.floor(innerWidth / COL_WIDTH);
+  if (cols > MAX_COLS) cols = MAX_COLS;
 
-  columnSpeed     = new Array(cols).fill(1.0);
+  drops = new Array(cols).fill(0);
+  columnSpeed      = new Array(cols).fill(1.0);
   columnMultiplier = new Array(cols).fill(1.0);
   columnTimer      = new Array(cols).fill(0);
   columnState      = new Array(cols).fill("normal");
 
   for (let i = 0; i < cols; i++) {
-    columnSpeed[i] = 0.9 + Math.random() * 1.4;
+    columnSpeed[i] = 0.9 + Math.random() * (isMobile ? 0.9 : 1.4); // slightly narrower range on mobile
+    drops[i] = Math.random() * (innerHeight / ROW_HEIGHT); // random start
   }
+
+  // clear canvases visually
+  ctx.fillStyle = "black";
+  ctx.fillRect(0,0,innerWidth,innerHeight);
+  crtCtx.clearRect(0,0,innerWidth,innerHeight);
 }
 
 resize();
 addEventListener("resize", resize);
 
-function getMatrixChar() {
-  const r = Math.random();
-
-  if (r < 0.50)
-    return String.fromCharCode(48 + Math.floor(Math.random() * 10));
-
-  if (r < 0.80)
-    return String.fromCharCode(65 + Math.floor(Math.random() * 26));
-
-  return JAPANESE[Math.floor(Math.random() * JAPANESE.length)];
+/* fast char getter using pre-cached array */
+function getMatrixCharRandom() {
+  // pick from CHARS by index, using bitwise for speed
+  return CHARS[(Math.random() * CHARS.length) | 0];
 }
 
+/* column state management (kept but lighter) */
 function resetColumnStates() {
   for (let i=0; i<cols; i++) {
     columnMultiplier[i] = 1.0;
@@ -243,8 +272,9 @@ function resetColumnStates() {
 }
 
 function updateColumnStates() {
-  for (let i = 0; i < cols; i++) {
-
+  // only sample some columns per frame on mobile to reduce cost
+  const sampleEvery = isMobile ? 3 : 1;
+  for (let i = 0; i < cols; i += sampleEvery) {
     if (columnTimer[i] > 0) {
       columnTimer[i]--;
       if (columnTimer[i] === 0) {
@@ -255,69 +285,79 @@ function updateColumnStates() {
     }
 
     const r = Math.random();
-
-    if (r > 0.995) {
+    if (r > 0.9965) {
       columnState[i] = "accel";
-      columnMultiplier[i] = 2 + Math.random() * 4;
-      columnTimer[i] = 20 + Math.floor(Math.random() * 70);
+      columnMultiplier[i] = 2 + Math.random() * 3;
+      columnTimer[i] = 10 + Math.floor(Math.random() * (isMobile ? 40 : 70));
       continue;
     }
 
-    if (r < 0.002) {
+    if (r < 0.002 && !isMobile) {
       columnState[i] = "stalled";
       columnMultiplier[i] = 0.0;
-      columnTimer[i] = 10 + Math.floor(Math.random() * 90);
+      columnTimer[i] = 6 + Math.floor(Math.random() * (isMobile ? 30 : 90));
       continue;
     }
 
     if (r > 0.98) {
-      columnMultiplier[i] = 1.2 + Math.random() * 0.8;
-      columnTimer[i] = 8 + Math.floor(Math.random() * 20);
+      columnMultiplier[i] = 1.1 + Math.random() * 0.6;
+      columnTimer[i] = 6 + Math.floor(Math.random() * (isMobile ? 12 : 20));
       columnState[i] = "normal";
     }
   }
 }
 
+/* draw loop with throttling */
 function matrixLoop(now) {
-  const dt = (now - lastTime) || 16;
-  lastTime = now;
+  const elapsed = now - lastFrameTime;
+  if (elapsed < FRAME_INTERVAL) {
+    // skip heavy update and still draw lightweight CRT overlay (kept minimal)
+    drawCRTNoise(now);
+    requestAnimationFrame(matrixLoop);
+    return;
+  }
+  lastFrameTime = now;
 
   if (matrixRunning) {
-    ctx.fillStyle = "rgba(0,0,0,0.03)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // translucent fade (kept low alpha for trails but cheaper than redrawing whole background each char)
+    ctx.fillStyle = "rgba(0,0,0,0.06)";
+    ctx.fillRect(0, 0, innerWidth, innerHeight);
 
     ctx.textBaseline = "top";
     ctx.font = `${baseFontSize}px monospace`;
 
     updateColumnStates();
 
-    for (let i = 0; i < drops.length; i++) {
+    // only render every column, but for mobile reduce inner per-column workload
+    const trailLength = isMobile ? 3 : 6;
+    const colsStep = 1; // can increase to 2 to further reduce load if needed
+
+    for (let i = 0; i < drops.length; i += colsStep) {
       const speed = columnSpeed[i] * columnMultiplier[i];
 
-      const headChar = getMatrixChar();
-      ctx.fillStyle = "#bff3ff";
-      ctx.shadowColor = "#bff3ff";
-      ctx.shadowBlur = 8;
+      // head
+      const headChar = getMatrixCharRandom();
+      ctx.fillStyle = "#bff3ff"; // bright head
+      // avoid shadowBlur entirely for speed
       ctx.globalAlpha = 1;
-      ctx.fillText(headChar, i * 18, drops[i] * 20);
+      ctx.fillText(headChar, i * COL_WIDTH, drops[i] * ROW_HEIGHT);
 
-      ctx.shadowBlur = 0;
-
-      const trailLength = 6;
+      // trailing chars (reduced count on mobile)
       for (let t = 1; t <= trailLength; t++) {
-        const alpha = Math.max(0, 1 - t * 0.16);
+        const alpha = Math.max(0, 1 - t * 0.18);
         ctx.globalAlpha = alpha;
         ctx.fillStyle = "#2563eb";
-        const ch = getMatrixChar();
-        ctx.fillText(ch, i * 18, (drops[i] - t) * 20);
+        const ch = CHARS[((Math.random() * CHARS.length) | 0)];
+        ctx.fillText(ch, i * COL_WIDTH, (drops[i] - t) * ROW_HEIGHT);
       }
 
       ctx.globalAlpha = 1;
 
-      const deltaRows = speed * (dt / 16);
+      // deltaRows based on elapsed target
+      const deltaRows = speed * (elapsed / 16);
       drops[i] += deltaRows;
 
-      if (drops[i] * 20 > innerHeight + 50 && Math.random() > 0.98) {
+      if (drops[i] * ROW_HEIGHT > innerHeight + 50 && Math.random() > (isMobile ? 0.985 : 0.98)) {
         drops[i] = 0;
       }
     }
@@ -329,63 +369,58 @@ function matrixLoop(now) {
 
 requestAnimationFrame(matrixLoop);
 
-/* ===== CRT NOISE ===== */
+/* ===== CRT NOISE (LEVE) ===== */
 let noiseTicker = 0;
 
 function drawCRTNoise(now) {
-  const w = crtCanvas.width  / (window.devicePixelRatio || 1);
-  const h = crtCanvas.height / (window.devicePixelRatio || 1);
+  // We keep this function lightweight: small number of dots + light scanline overlay via CSS already
+  const w = innerWidth;
+  const h = innerHeight;
 
-  const base = matrixRunning ? 0.18 : 0.02;
-  const flick = 0.5 + 0.5 * Math.sin(now / 120);
+  // fade out when not running
+  const base = matrixRunning ? (isMobile ? 0.12 : 0.18) : 0.015;
+  const flick = 0.5 + 0.5 * Math.sin(now / 160);
   const intensity = Math.min(1, base * flick);
 
-  crtCanvas.style.opacity = `${Math.min(1, intensity * 2)}`;
+  // adjust canvas opacity to add subtle flicker
+  crtCanvas.style.opacity = `${Math.min(1, intensity * 1.6)}`;
 
-  crtCtx.clearRect(0, 0, crtCanvas.width, crtCanvas.height);
+  // clear only a small area or whole if necessary (cheap because smaller backing resolution)
+  crtCtx.clearRect(0, 0, w, h);
 
-  const cell = 3;
-  const colsN = Math.ceil(w / cell);
-  const rowsN = Math.ceil(h / cell);
-  const noiseAmount = Math.floor(colsN * rowsN * intensity * 0.35);
+  // limited noise dots
+  const noiseAmount = Math.floor(MAX_NOISE_DOTS * intensity);
 
   for (let n = 0; n < noiseAmount; n++) {
-    const x = Math.floor(Math.random() * colsN) * cell;
-    const y = Math.floor(Math.random() * rowsN) * cell;
-    const alpha = 0.02 + Math.random() * 0.08;
-    crtCtx.fillStyle = `rgba(255,255,255,${alpha})`;
-    crtCtx.fillRect(x, y, cell, cell);
+    const x = Math.random() * w;
+    const y = Math.random() * h;
+    const a = 0.01 + Math.random() * 0.03;
+    crtCtx.fillStyle = `rgba(255,255,255,${a})`;
+    // draw small 1-2px rects (cheap)
+    crtCtx.fillRect(x, y, Math.random() > 0.6 ? 2 : 1, Math.random() > 0.6 ? 2 : 1);
   }
 
-  crtCtx.globalCompositeOperation = "overlay";
-
-  const scanlineAlpha = 0.03 + Math.random() * 0.03;
-  for (let y = 0; y < h; y += 2) {
-    crtCtx.fillStyle = `rgba(0,0,0,${scanlineAlpha})`;
-    crtCtx.fillRect(0, y, w, 1);
-  }
-
-  crtCtx.globalCompositeOperation = "source-over";
-
-  crtCtx.fillStyle = `rgba(37,99,235,${0.004 * flick})`;
+  // subtle color wash
+  crtCtx.fillStyle = `rgba(37,99,235,${0.003 * flick})`;
   crtCtx.fillRect(0, 0, w, h);
 
   noiseTicker++;
-
-  if (noiseTicker % 120 === 0) {
-    const burstAlpha = 0.06 + Math.random() * 0.08;
+  // occasional larger burst but very rare
+  if (noiseTicker % (isMobile ? 240 : 120) === 0 && Math.random() > 0.6) {
+    const burstAlpha = 0.03 + Math.random() * 0.06;
     crtCtx.fillStyle = `rgba(255,255,255,${burstAlpha})`;
     crtCtx.fillRect(
       Math.random() * w * 0.2,
       Math.random() * h * 0.2,
-      w * (0.6 + Math.random() * 0.4),
-      h * (0.6 + Math.random() * 0.4)
+      w * (0.4 + Math.random() * 0.4),
+      h * (0.4 + Math.random() * 0.4)
     );
   }
 }
 
 /* inicial */
 render();
+
 </script>
 
 </body>
